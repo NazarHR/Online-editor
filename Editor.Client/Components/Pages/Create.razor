@@ -1,0 +1,97 @@
+﻿@page "/create"
+@rendermode InteractiveServer
+
+@using TinyMCE.Blazor
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using System.Net
+@using System.ComponentModel.DataAnnotations
+@using System.Net.Http.Headers
+
+
+@inject HttpClient _client
+@inject IJSRuntime JSRuntime
+@inject UserManager userManager
+@inject NavigationManager navigationManager
+@inject AuthenticationStateProvider authenticationStateProvider
+
+<PageTitle>Create</PageTitle>
+<Modal @ref="modal" />
+
+<CascadingAuthenticationState>
+    <AuthorizeView Context="authContext">
+        <Authorized>
+            
+            <div class="row">
+                <div class="col-md-4">
+                    <EditForm Model="@document" method="post" OnValidSubmit="PostDataToApi" FormName="createForm">
+                        <DataAnnotationsValidator />
+                        <hr />
+                        <ValidationSummary class="text-danger" role="alert" />
+                        <div class="form-group mb-3">
+                            <InputText  @bind-Value="document.Title" class="form-control" aria-required="true" placeholder="Untitled" />
+                            <ValidationMessage For="() => document.Title" class="text-danger" />
+                        </div>
+
+                        <div class="form-floating mb-3">
+                            <Editor Field="()=>document.Content" Conf="@editorConf" @bind-Value="document.Content" class="form-control" style="width: 60vw; height: 80vh" aria-required="true" placeholder="Write here" />
+                            <ValidationMessage For="() => document.Content" class="text-danger" />
+                        </div>
+
+                        <div class="form-group">
+                            <input type="submit" value="Create" class="btn btn-primary" />
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+
+            <div>
+                <Button class="btn btn-info my-3" @onclick="GoHome">Back to List</Button>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+
+</CascadingAuthenticationState>
+
+
+
+@code {
+    [SupplyParameterFromForm(FormName = "createForm")]
+    private DocumentModel document { get; set; } = new() {
+        Title = "Untitled",
+        Content = ""
+    };
+    private Dictionary<string, object> editorConf = new Dictionary<string, object>{
+    {"width", "60vw"},
+    { "height", "80vh"} };
+    private Modal modal = default!;
+
+    public async Task PostDataToApi()
+    {
+        var user = await userManager.GetUserAsync();
+        var apiAuthenticationToken = user.FindFirstValue(ClaimTypes.Authentication);
+
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiAuthenticationToken);
+
+        var response = await _client.PostAsJsonAsync<DocumentModel>("/api/Documents", document);
+        if(response.IsSuccessStatusCode)
+        {
+            var documentId = response.Headers.Location!.AbsolutePath.Split("/").Last();
+            navigationManager.NavigateTo("/edit/" + documentId, forceLoad:true);
+        }
+        else if (response.StatusCode == HttpStatusCode.PaymentRequired)
+        {
+            var parameters = new Dictionary<string, object>();
+            parameters.Add("ModalClose", CloseModal);
+            await modal.ShowAsync<PaymentModal>(title: "You exceeded your document limit", parameters:parameters);
+        }
+    }
+    public async Task CloseModal()
+    {
+        await modal.HideAsync();
+    }
+    public void GoHome()
+    {
+       navigationManager.NavigateTo("/", forceLoad: true);
+    }
+}

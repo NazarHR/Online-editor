@@ -1,0 +1,131 @@
+﻿@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using System.Net.Http.Headers
+@using TinyMCE.Blazor
+@using System.Net
+
+@inject HttpClient _client
+@inject IJSRuntime JSRuntime
+@inject UserManager userManager
+@inject NavigationManager navigationManager
+@inject AuthenticationStateProvider authenticationStateProvider
+
+@page "/edit/{documentId:int}"
+@attribute [StreamRendering]
+@rendermode InteractiveServer
+
+<h3>Edit</h3>
+
+
+<CascadingAuthenticationState>
+    <AuthorizeView Context="authContext">
+        <Authorized>
+            @if (document == null)
+            {
+                <p><em>Loading...</em></p>
+            }
+            else
+            {
+                <div class="row">
+                    <div class="col-md-4">
+                        <EditForm Model="@document" method="put" OnValidSubmit="PutData" FormName="editForm">
+                            <DataAnnotationsValidator />
+                            <hr />
+                            <ValidationSummary class="text-danger" role="alert" />
+                            <div class="form-group mb-3">
+                                <InputText  @bind-Value="document.Title" class="form-control" aria-required="true" placeholder="Untitled" />
+                                <ValidationMessage For="() => document.Title" class="text-danger" />
+                            </div>
+
+                            <div class="form-floating mb-3">
+                                <Editor Field="()=>document.Content" Conf="@editorConf" @bind-Value="document.Content" class="form-control" style="width: 60vw; height: 80vh" aria-required="true" placeholder="Write here" />
+                                <ValidationMessage For="() => document.Content" class="text-danger" />
+                            </div>
+
+                            <div class="form-group">
+                                <input type="submit" value="Save" class="btn btn-primary" />
+                                <Button @onclick="DeleteData" class="btn btn-danger">Delete</Button>
+                            </div>
+                        </EditForm>
+                    </div>
+                </div>
+
+                <div>
+                    <Button class="btn btn-info mt-3" @onclick="GoHome">Back to List</Button>
+                </div>
+            }
+        </Authorized>
+    </AuthorizeView>
+</CascadingAuthenticationState>
+
+
+@code {
+    [Parameter]
+    public int? documentId { get; set; }
+    private DocumentModel document { get; set; } = default!;
+    private Dictionary<string, object> editorConf = new Dictionary<string, object>{
+    {"width", "60vw"},
+    { "height", "80vh"} };
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await userManager.GetUserAsync();
+        if (user==null || !user.Identity.IsAuthenticated)
+        {
+            navigationManager.NavigateTo("/Account/Login");
+        }
+        var id = user.FindFirstValue(ClaimTypes.Sid);
+        var apiAuthenticationToken = user.FindFirstValue(ClaimTypes.Authentication);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiAuthenticationToken);
+        var response = await _client.GetAsync("/api/Documents/" + id+"/"+ documentId);
+        if (response.IsSuccessStatusCode)
+        {
+            document = await response.Content.ReadFromJsonAsync<DocumentModel>();
+        }
+        else
+        {
+            navigationManager.NavigateTo("/no_content");
+        }
+    }
+    public async Task PutData()
+    {
+        var user = await userManager.GetUserAsync();
+        var apiAuthenticationToken = user.FindFirstValue(ClaimTypes.Authentication);
+
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiAuthenticationToken);
+        var response = await _client.PutAsJsonAsync<DocumentModel>("/api/Documents", document);
+
+        if(response.IsSuccessStatusCode)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Saved.");
+        }
+        else
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Something went wrong. Try again later");
+        }
+
+    }
+    public async Task DeleteData()
+    {
+        var user = await userManager.GetUserAsync();
+        var apiAuthenticationToken = user.FindFirstValue(ClaimTypes.Authentication);
+
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiAuthenticationToken);
+        var response = await _client.DeleteAsync("/api/Documents/"+documentId);
+        if(response.IsSuccessStatusCode)
+        {
+            navigationManager.NavigateTo("/", forceLoad: true);
+        }
+        else
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Something went wrong. Try again later");
+        }
+
+    }
+    public void GoHome()
+    {
+        navigationManager.NavigateTo("/", forceLoad: true);
+    }
+}

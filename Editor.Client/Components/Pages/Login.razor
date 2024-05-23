@@ -1,0 +1,93 @@
+﻿@page "/Account/Login"
+
+@using System.ComponentModel.DataAnnotations
+@using Editor.Client.Services
+@using System.Net.Http.Headers
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+
+
+@inject HttpClient _client
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JsRuntime
+
+
+<PageTitle>Log in</PageTitle>
+<CascadingAuthenticationState>
+    <AuthorizeView Context="authContext">
+        <Authorized>
+            <p>Hello @authContext.User.Identity?.Name!</p>
+        </Authorized>
+        <NotAuthorized>
+            <div>
+                <h1>Log in</h1>
+                    <div class="row">
+                      <div class="col-md-4">
+                        <section>
+                            <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
+                                <DataAnnotationsValidator />
+                                <hr />
+                                <ValidationSummary class="text-danger" role="alert" />
+                                <div class="form-floating mb-3">
+                                    <InputText @bind-Value="Input.Username" class="form-control" autocomplete="username" aria-required="true" placeholder="Username" />
+                                    <label for="username" class="form-label">Username</label>
+                                    <ValidationMessage For="() => Input.Username" class="text-danger" />
+                                </div>
+                                <div class="form-floating mb-3">
+                                    <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="password" />
+                                    <label for="password" class="form-label">Password</label>
+                                    <ValidationMessage For="() => Input.Password" class="text-danger" />
+                                </div>
+                                <div>
+                                    <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
+                                </div>
+                            </EditForm>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </NotAuthorized>
+    </AuthorizeView>
+</CascadingAuthenticationState>
+
+@code {
+
+    [CascadingParameter]
+    private HttpContext Context { get; set; } = default!;
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    public async Task LoginUser()
+    {
+        var response = await _client.PostAsJsonAsync<InputModel>("/auth", Input);
+        //await JsRuntime.InvokeVoidAsync("alert", Input.Username);
+        if (response.IsSuccessStatusCode)
+        {
+            var tokenProvider = await response.Content.ReadFromJsonAsync<TokenProvider>();
+            //_client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenProvider.Token);
+            var identity = new ClaimsIdentity(
+             new[]
+              {
+                new Claim(ClaimTypes.Sid, tokenProvider.UserId),
+                new Claim(ClaimTypes.Name,  Input.Username),
+                new Claim(ClaimTypes.Authentication, tokenProvider.Token)
+                  },
+           "Custom Authentication");
+            var newUser = new ClaimsPrincipal(identity);
+            var options = new AuthenticationProperties()
+                {
+                    IsPersistent = true,
+                    ExpiresUtc = DateTime.Parse(tokenProvider.Expiration)
+                };
+            await Context.SignInAsync(newUser, options);
+            NavigationManager.NavigateTo("/", forceLoad: true);
+        }
+        else
+        {
+            await JsRuntime.InvokeVoidAsync("alert" , "Error: Invalid login attempt.");
+        }
+    }
+}

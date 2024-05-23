@@ -1,0 +1,67 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using System.Net.Http.Headers
+@using System.Security.Claims
+
+@inject IJSRuntime JSRuntime
+@inject HttpClient _client
+@inject NavigationManager navigationManager
+@inject AuthenticationStateProvider authenticationStateProvider
+
+<div class="text-center">
+    <div class="row my-3 d-flex justify-content-center">Want to buy some more?</div>
+    <div class="row d-flex justify-content-center">
+        <div class="mb-3">Quantity: </div>
+        <NumberInput Class="w-25 text-center" TValue="int" @bind-Value="@Quantity" Placeholder="Enter amount" EnableMinMax="true" Min="1" Max="500" />
+    </div>
+    <div class="row mt-3 d-flex justify-content-center">Price: @Quantity$</div>
+    <Button class="mt-3 mx-3" Color="ButtonColor.Danger" Type="ButtonType.Button" @onclick="()=>ModalClose()">
+        Cancel
+    </Button>
+    <Button class="mt-3 mx-3" Color="ButtonColor.Success" Type="ButtonType.Button" @onclick="GoToPayment">
+        Pay
+    </Button> 
+</div>
+
+@code {
+    private int Quantity { get; set; } = 0; 
+    [Parameter ]public Func<Task> ModalClose{ get; set; }
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+    }
+    private async Task<string?> GetPaymentLink(int Quantity)
+    {
+        var authState = await authenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var apiAuthenticationToken = user.FindFirstValue(ClaimTypes.Authentication);
+
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiAuthenticationToken);
+        var response = await _client.PostAsJsonAsync("/api/Payment",
+            new { 
+                productId = "prod_Q7JsAwUWMbnPkj", 
+                amount = Quantity,
+                returnLink = "https://cdn.dribbble.com/users/2130055/screenshots/14009086/media/eca03196c602340a3faae2d422cd85e7.png?resize=1000x750&vertical=center"
+            });
+
+        if(response.IsSuccessStatusCode)
+        {
+            var requestResult = await response.Content.ReadFromJsonAsync<PaymentLinkRequestResult>();
+            return requestResult!.PaymentUrl;
+        }
+        return null;
+    }
+    private async Task GoToPayment()
+    {
+        var url = await GetPaymentLink(Quantity);
+        if(url != null)
+        {
+            await JSRuntime.InvokeVoidAsync("open", url, "_blank");
+            await ModalClose();
+        }
+        else
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Something went wrong. Try again later");
+        }
+
+    }
+}

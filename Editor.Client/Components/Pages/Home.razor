@@ -1,0 +1,11 @@
+﻿@page "/"
+@inject NavigationManager navigationManager
+
+
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        navigationManager.NavigateTo("/documents", true, true);
+    }
+}

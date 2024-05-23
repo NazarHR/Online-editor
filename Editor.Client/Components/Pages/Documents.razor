@@ -1,0 +1,80 @@
+﻿@page "/documents"
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using System.Net.Http.Headers
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+
+@inject AuthenticationStateProvider authenticationStateProvider
+@inject HttpClient _client
+@inject UserManager userManager
+@inject NavigationManager navigationManager
+
+<PageTitle>Documents</PageTitle>
+
+<h1>Documents</h1>
+
+@if(documents==null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row mt-5">
+        @foreach (var document in documents)
+        {
+            
+                <div class="col-2 mb-3">
+                    <Button @onclick= "()=>Edit(document.Id)">
+                        <div class="d-flex justify-content-center align-items-center" style="width:150px; height: 200px; background-color:aliceblue; font-size:100px">
+                             <p style="text-decoration:none; color:black">🖹</p>
+                        </div>
+                        <span style="font-weight:bold">@document.Title</span>
+                    </Button>
+                </div>
+        }
+        <div class="col-2">
+            <Button @onclick="Create">
+                <div class="d-flex justify-content-center align-items-center" style="width:150px; height: 200px; background-color:aliceblue; font-size:100px">
+                    <p style="text-decoration:none; color:black">+</p>
+                </div>
+                <span style="font-weight:bold">Create New</span>
+            </Button>
+        </div>
+    </div>
+}
+
+
+@code {
+    private DocumentModel[]? documents;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await userManager.GetUserAsync();
+        if (user == null || !user.Identity.IsAuthenticated )
+        {
+            navigationManager.NavigateTo("/Account/Login");
+        }
+        var id = user.FindFirstValue(ClaimTypes.Sid);
+        var apiAuthenticationToken = user.FindFirstValue(ClaimTypes.Authentication);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiAuthenticationToken);
+        var response = await _client.GetAsync("/api/Documents/"+id);
+        if(response.IsSuccessStatusCode)
+        {
+            documents = await response.Content.ReadFromJsonAsync<DocumentModel[]>();
+        }
+    }
+
+    public void Edit(int? documentId)
+    {
+        navigationManager.NavigateTo("/edit/"+documentId, forceLoad: true);
+    }
+    public void Create()
+    {
+        navigationManager.NavigateTo("/create", forceLoad: true);
+    }
+}
